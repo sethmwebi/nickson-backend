@@ -266,6 +266,27 @@ def get_post(post_id):
         'user_id': post.user_id  # Added
     }), 200
 
+@app.route('/posts/<int:post_id>', methods=['DELETE'])
+@jwt_required()
+def delete_post(post_id):
+    current_user_id = get_jwt_identity()
+    
+    post = Post.query.get_or_404(post_id)
+    
+    if post.user_id != current_user_id:
+        return jsonify({'message': 'You are not authorized to delete this post'}), 403
+    
+    try:
+        Comment.query.filter_by(post_id=post_id).delete()
+        
+        db.session.delete(post)
+        db.session.commit()
+        
+        return jsonify({'message': 'Post deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error deleting post: {str(e)}'}), 500
+
 @app.route('/posts/<int:post_id>/comments', methods=['POST'])
 @jwt_required()
 def create_comment(post_id):
@@ -314,6 +335,33 @@ def follow_user(user_id):
     db.session.commit()
 
     return jsonify({'msg': 'Successfully followed user'}), 201
+
+@app.route('/comments/<int:comment_id>', methods=['DELETE'])
+@jwt_required()
+def delete_comment(comment_id):
+    current_user_id = get_jwt_identity()
+    
+    # Find the comment to be deleted
+    comment = Comment.query.get_or_404(comment_id)
+    
+    # Find the associated post
+    post = Post.query.get_or_404(comment.post_id)
+    
+    # Check if current user is either the comment author OR the post author
+    if current_user_id not in [comment.user_id, post.user_id]:
+        return jsonify({'message': 'You are not authorized to delete this comment'}), 403
+    
+    try:
+        db.session.delete(comment)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Comment deleted successfully',
+            'deleted_comment_id': comment_id
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error deleting comment: {str(e)}'}), 500
 
 # Endpoint to unfollow a user
 @app.route('/unfollow/<int:user_id>', methods=['DELETE'])
